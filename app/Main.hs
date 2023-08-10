@@ -57,5 +57,22 @@ main =
             do
               i <- [0, 2 .. 64]
               pure $ bench (show @Nat (2 ^ i)) $ nfAppIO prop_not_composition i
+        ],
+      bgroup
+        "bigint (Scott)"
+        [ testProperty
+            "fromInt & toInt reciprocal correctness"
+            \n -> n >= 0 ==> prop_bigint_iso (toEnum n),
+          testProperty
+            "addition correctness"
+            \a b -> a >= 0 && b >= 0 ==> (((monadicIO . run) .) . prop_bigint_add) (toEnum a) (toEnum b),
+          bgroup
+            "addition scaling"
+            do
+              i <- [0 :: Nat, 2 .. 16]
+              let n = 2 ^ i
+              pure $
+                bench (show @Nat n) $
+                  nfAppIO (\a -> prop_bigint_add a a) n
         ]
     ]

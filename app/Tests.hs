@@ -1,11 +1,12 @@
 module Tests where
 
 import Control.Monad
+import Data.Bits
 import Data.Foldable
 import Data.IntMap.Strict
 import GHC.Conc
 import GHC.TypeLits
-import Runtime (evaluate)
+import Runtime (Patterns, evaluate)
 import System.Random (randomIO)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
@@ -122,3 +123,149 @@ prop_fib i = monadicIO $ run do
   where
     fib = (fibs !!)
     fibs = 1 : scanl (+) 1 fibs
+
+-- BigInts
+bigIntPresets :: Patterns
+bigIntPresets =
+  let any' = Variable Nothing
+   in fromList
+        [ -- End
+          (0x0, [([], const do lambdaHelper \e -> lambdaHelper \_ -> lambdaHelper (const (pure e)))]),
+          -- B0
+          (0x1, [([any'], \(head -> p) -> lambdaHelper \_ -> lambdaHelper \o -> lambdaHelper (const do newNodeRef (Application o p)))]),
+          -- B1
+          (0x2, [([any'], \(head -> p) -> lambdaHelper \_ -> lambdaHelper \_ -> lambdaHelper \i -> do newNodeRef (Application i p))]),
+          -- Inc
+          ( 0x3,
+            [ ( [any'],
+                \(head -> n) -> lambdaHelper \ex -> lambdaHelper \ox -> lambdaHelper \ix -> do
+                  part1 <- newNodeRef (Application n ex)
+                  part2 <- newNodeRef (Application part1 ix)
+                  i <- lambdaHelper \p -> do
+                    ip <- newNodeRef (Constructor 0x3 [p])
+                    newNodeRef (Application ox ip)
+                  newNodeRef (Application part2 i)
+              )
+            ]
+          ),
+          -- App
+          ( 0x4,
+            [ ( [any', any', any'],
+                \case
+                  [n, f, x] -> do
+                    e <- lambdaHelper \_ -> lambdaHelper pure
+                    let φ h = lambdaHelper \z -> do
+                          (_, f1, f2) <- createDup 0x4 h
+                          part <- newNodeRef (Application f1 z)
+                          newNodeRef (Application f2 part)
+                    o <- lambdaHelper \p -> lambdaHelper \g -> lambdaHelper \y -> do
+                      φ1 <- φ g
+                      newNodeRef (Constructor 0x4 [p, φ1, y])
+                    i <- lambdaHelper \p -> lambdaHelper \g -> lambdaHelper \y -> do
+                      (_, g1, g2) <- createDup 0x4 g
+                      φ1 <- φ g1
+                      gy <- newNodeRef (Application g2 y)
+                      newNodeRef (Constructor 0x4 [p, φ1, gy])
+                    newNodeRef (Application n e)
+                      >>= newNodeRef . flip Application o
+                      >>= newNodeRef . flip Application i
+                      >>= newNodeRef . flip Application f
+                      >>= newNodeRef . flip Application x
+                  _ -> undefined
+              )
+            ]
+          ),
+          -- Add
+          ( 0x5,
+            [ ( [any', any'],
+                \case
+                  [a, b] -> do
+                    inc <- lambdaHelper \x -> newNodeRef (Constructor 0x3 [x])
+                    newNodeRef (Constructor 0x4 [a, inc, b])
+                  _ -> undefined
+              )
+            ]
+          ),
+          -- FromInt
+          ( 0x6,
+            [ ([IntegerValue 0], const (newNodeRef (Constructor 0x0 []))),
+              ( [any'],
+                \case
+                  [s, i] -> do
+                    one <- newNodeRef (IntegerValue 1)
+                    (_, two1, two2) <-
+                      createDup 0x6
+                        =<< newNodeRef (IntegerValue 2)
+                    (_, i1, i2) <- createDup 0x6 i
+                    s1 <- newNodeRef (Operator '-' s one)
+                    bit' <- newNodeRef (Operator '%' i1 two1)
+                    rest <- newNodeRef (Operator '/' i2 two2)
+                    newNodeRef (Constructor 0x7 [bit', s1, rest])
+                  _ -> undefined
+              )
+            ]
+          ),
+          -- FromIntUtil
+          ( 0x7,
+            [ ( [IntegerValue 0, any', any'],
+                \case
+                  [_, s, i] ->
+                    newNodeRef . Constructor 0x1 . pure
+                      =<< newNodeRef (Constructor 0x6 [s, i])
+                  _ -> undefined
+              ),
+              ( [IntegerValue 1, any', any'],
+                \case
+                  [_, s, i] ->
+                    newNodeRef . Constructor 0x2 . pure
+                      =<< newNodeRef (Constructor 0x6 [s, i])
+                  _ -> undefined
+              ),
+              ([any', any', any'], error "here")
+            ]
+          ),
+          -- ToInt
+          ( 0x8,
+            [ ( [any'],
+                \(head -> n) -> do
+                  e <- newNodeRef (IntegerValue 0)
+                  one <- newNodeRef (IntegerValue 1)
+                  (_, two1, two2) <- createDup 0x8 =<< newNodeRef (IntegerValue 2)
+                  o <- lambdaHelper \p ->
+                    newNodeRef . Operator '*' two1
+                      =<< newNodeRef (Constructor 0x8 [p])
+                  i <- lambdaHelper \p ->
+                    newNodeRef . Operator '+' one
+                      =<< newNodeRef . Operator '*' two2
+                      =<< newNodeRef (Constructor 0x8 [p])
+                  newNodeRef (Application n e)
+                    >>= newNodeRef . flip Application o
+                    >>= newNodeRef . flip Application i
+              )
+            ]
+          )
+        ]
+
+prop_bigint_iso :: Nat -> Property
+prop_bigint_iso n = monadicIO $ run do
+  let expected = IntegerValue (fromEnum n)
+  input <- newNodeRefIO expected
+  size' <- newNodeRefIO (IntegerValue (finiteBitSize @Int 0))
+  scott <- newNodeRefIO (Constructor 0x6 [size', input])
+  unscott <- newNodeRefIO (Constructor 0x8 [scott])
+  result <- evaluate bigIntPresets unscott
+  pure (result == expected)
+
+prop_bigint_add :: Nat -> Nat -> IO Bool
+prop_bigint_add a b = do
+  let expected = IntegerValue (fromEnum (a + b))
+  (_, size'1, size'2) <- atomically do
+    createDup 0x0 =<< newNodeRef (IntegerValue (finiteBitSize @Int 0))
+  a' <- newNodeRefIO (IntegerValue (fromEnum a))
+  b' <- newNodeRefIO (IntegerValue (fromEnum b))
+  scottA <- newNodeRefIO (Constructor 0x6 [size'1, a'])
+  scottB <- newNodeRefIO (Constructor 0x6 [size'2, b'])
+  scottC <- newNodeRefIO (Constructor 0x5 [scottA, scottB])
+  root <- newNodeRefIO (Constructor 0x8 [scottC])
+  result <- evaluate bigIntPresets root
+  pure (result == expected)

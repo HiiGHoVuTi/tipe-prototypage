@@ -1,4 +1,4 @@
-module Runtime (evaluate) where
+module Runtime where
 
 import Control.Monad
 import Data.Bitraversable
@@ -93,7 +93,9 @@ evaluate pat = evaluate'
                       x <- evaluate' x'
                       pure (guard (x == y))
                     matchAndGenerate (ys, pattern) = do
-                      match <- mconcat <$> zipWithM matches xs ys
+                      match <-
+                        Prelude.foldl (*>) (Just ())
+                          <$> zipWithM matches xs ys
                       pure (match $> pattern xs)
                 newRef <-
                   fmap (head . catMaybes)
