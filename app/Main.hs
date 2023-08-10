@@ -23,6 +23,13 @@ main =
           bgroup
             "operations"
             [ testProperty "basic operators" prop_op
+            ],
+          bgroup
+            "constructors"
+            [ testProperty
+                "fib function"
+                ( \n -> n >= 0 && n <= 20 ==> prop_fib (toEnum n)
+                )
             ]
         ],
       bgroup
