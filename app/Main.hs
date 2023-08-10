@@ -53,6 +53,7 @@ data Node
   | Variable (Maybe NodeRef)
   | Application NodeRef NodeRef
   | Constructor Identifier [NodeRef]
+  | Operator Char NodeRef NodeRef
   deriving (Eq, Generic, Data, NFData)
 
 showNode :: Node -> String
@@ -157,6 +158,11 @@ evaluate root =
           -- TODO(Maxime): avoid this using a whnf detector
           when (f == ψ) (error ("impossible to evaluate " <> showNode f))
           evaluate root
+    Operator c x y -> do
+      Just op <- pure $ lookup c [('+', (+)), ('-', (-)), ('*', (*)), ('/', quot), ('%', rem)]
+      (,) <$> evaluate x <*> evaluate y >>= \case
+        (IntegerValue a, IntegerValue b) -> pure (IntegerValue (a `op` b))
+        _ -> error "called operator on non-integers"
     node -> pure node
 
 -- tests
@@ -233,6 +239,17 @@ prop_not_composition n = do
   result <- newNodeRefIO (Application finalF true)
   evaluate result
 
+prop_op :: Int -> Int -> Property
+prop_op a' b' = monadicIO $ run do
+  a <- newNodeRefIO (IntegerValue a')
+  b <- newNodeRefIO (IntegerValue b')
+  (_, a1, a2) <- atomically do createDup 0 a
+  partial <- newNodeRefIO (Operator '+' a1 b)
+  root' <- newNodeRefIO (Operator '*' partial a2)
+  (_, root, _) <- atomically do createDup 1 root'
+  result <- evaluate root
+  pure (result == IntegerValue ((a' + b') * a'))
+
 main :: IO ()
 main =
   defaultMain
@@ -244,6 +261,10 @@ main =
             "duplication"
             [ testProperty "duplication of the identity" prop_dup_id,
               testProperty "duplication of a constructor" prop_dup_cons
+            ],
+          bgroup
+            "operations"
+            [ testProperty "basic operators" prop_op
             ]
         ],
       bgroup
