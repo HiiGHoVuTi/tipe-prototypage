@@ -1,7 +1,6 @@
 module Types where
 
 import Control.DeepSeq
-import Control.Monad
 import Data.Data
 import GHC.Conc
 import GHC.Generics
@@ -82,36 +81,3 @@ lambdaHelper body = do
   α <- newNodeRef (Variable Nothing)
   ν <- body α
   newNodeRef (Lambda α ν)
-
--- FIXME(Maxime): remove this function
--- NOTE(Maxime): O(n)
--- NOTE(Maxime): copying identifiers might interfere
--- TODO(Maxime): recursion schemes ?
-physicalNaiveClone :: NodeRef -> STM NodeRef
-physicalNaiveClone =
-  readNodeRef >=> \case
-    Superposition ι (r1, r2) -> do
-      r1' <- physicalNaiveClone r1
-      r2' <- physicalNaiveClone r2
-      newNodeRef (Superposition ι (r1', r2'))
-    Duplication ι r0 (r1, r2) -> do
-      r0' <- physicalNaiveClone r0
-      r1' <- physicalNaiveClone r1
-      r2' <- physicalNaiveClone r2
-      newNodeRef (Duplication ι r0' (r1', r2'))
-    Duplicated r0 -> newNodeRef . Duplicated =<< physicalNaiveClone r0
-    IntegerValue i -> newNodeRef (IntegerValue i)
-    Lambda r0 r1 -> do
-      r0' <- physicalNaiveClone r0
-      r1' <- physicalNaiveClone r1
-      newNodeRef (Lambda r0' r1')
-    Variable mr0 -> newNodeRef . Variable =<< traverse physicalNaiveClone mr0
-    Application r0 r1 -> do
-      r0' <- physicalNaiveClone r0
-      r1' <- physicalNaiveClone r1
-      newNodeRef (Application r0' r1')
-    Constructor ι refs -> newNodeRef . Constructor ι =<< traverse physicalNaiveClone refs
-    Operator c r1 r2 -> do
-      r1' <- physicalNaiveClone r1
-      r2' <- physicalNaiveClone r2
-      newNodeRef (Operator c r1' r2')
