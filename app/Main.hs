@@ -55,7 +55,7 @@ main =
           bgroup
             "fusion"
             do
-              i <- [0, 2 .. 64]
+              i <- [0, 8 .. 64]
               pure $ bench (show @Nat (2 ^ i)) $ nfAppIO prop_not_composition i
         ],
       bgroup
@@ -69,7 +69,7 @@ main =
           bgroup
             "addition scaling"
             do
-              i <- [0 :: Nat, 2 .. 16]
+              i <- [0 :: Nat, 3 .. 24]
               let n = 2 ^ i
               pure $
                 bench (show @Nat n) $
