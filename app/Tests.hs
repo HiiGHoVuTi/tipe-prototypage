@@ -1,6 +1,5 @@
 module Tests where
 
-import Control.Monad
 import Data.Bits
 import Data.Foldable
 import Data.IntMap.Strict
@@ -248,6 +247,28 @@ bigIntPresets =
                     >>= newNodeRef . flip Application i
               )
             ]
+          ),
+          -- FIXME(Maxime): output has fixed size
+          ( 0x9,
+            [ ( [any', any'],
+                \case
+                  [a, b] -> do
+                    (_, b₁,b') <- createDup 0 b
+                    (_, b₂, b₃) <- createDup 1 b'
+                    e <- newNodeRef (Constructor 0x0 [])
+                    o <- lambdaHelper \p -> do
+                      rest <- newNodeRef (Constructor 0x9 [p, b₁])
+                      newNodeRef (Constructor 0x1 [rest])
+                    i <- lambdaHelper \p -> do
+                      rest <- newNodeRef (Constructor 0x9 [p, b₂])
+                      rest' <- newNodeRef (Constructor 0x1 [rest])
+                      newNodeRef (Constructor 0x5 [rest', b₃])
+                    newNodeRef (Application a e)
+                      >>= newNodeRef . flip Application o
+                      >>= newNodeRef . flip Application i
+                  _ -> undefined
+              )
+            ]
           )
         ]
 
@@ -265,12 +286,26 @@ prop_bigint_add :: Nat -> Nat -> IO Bool
 prop_bigint_add a b = do
   let expected = IntegerValue (fromEnum (a + b))
   (_, size'1, size'2) <- atomically do
-    createDup 0x0 =<< newNodeRef (IntegerValue (finiteBitSize @Int 0))
+    createDup 0x0 =<< newNodeRef (IntegerValue (finiteBitSize @Int 0 * 2))
   a' <- newNodeRefIO (IntegerValue (fromEnum a))
   b' <- newNodeRefIO (IntegerValue (fromEnum b))
   scottA <- newNodeRefIO (Constructor 0x6 [size'1, a'])
   scottB <- newNodeRefIO (Constructor 0x6 [size'2, b'])
   scottC <- newNodeRefIO (Constructor 0x5 [scottA, scottB])
+  root <- newNodeRefIO (Constructor 0x8 [scottC])
+  result <- evaluate bigIntPresets root
+  pure (result == expected)
+
+prop_bigint_mul :: Nat -> Nat -> IO Bool
+prop_bigint_mul a b = do
+  let expected = IntegerValue (fromEnum (a * b))
+  (_, size'1, size'2) <- atomically do
+    createDup 0x0 =<< newNodeRef (IntegerValue (finiteBitSize @Int 0 * 2))
+  a' <- newNodeRefIO (IntegerValue (fromEnum a))
+  b' <- newNodeRefIO (IntegerValue (fromEnum b))
+  scottA <- newNodeRefIO (Constructor 0x6 [size'1, a'])
+  scottB <- newNodeRefIO (Constructor 0x6 [size'2, b'])
+  scottC <- newNodeRefIO (Constructor 0x9 [scottA, scottB])
   root <- newNodeRefIO (Constructor 0x8 [scottC])
   result <- evaluate bigIntPresets root
   pure (result == expected)

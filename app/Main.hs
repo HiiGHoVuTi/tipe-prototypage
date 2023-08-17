@@ -73,6 +73,14 @@ main =
               let n = 2 ^ i
               pure $
                 bench (show @Nat n) $
-                  nfAppIO (\a -> prop_bigint_add a a) n
+                  nfAppIO (\a -> prop_bigint_add a a) n,
+          bgroup
+            "multiplication scaling"
+            do
+              i <- [0 :: Nat, 3 .. 24]
+              let n = 2 ^ i
+              pure $
+                bench (show @Nat n) $
+                  nfAppIO (\a -> prop_bigint_mul a a) n
         ]
     ]
