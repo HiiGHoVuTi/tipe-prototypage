@@ -71,18 +71,23 @@ prop_not_composition n = do
     lambdaHelper \p -> lambdaHelper \t -> lambdaHelper \f -> do
       partial <- newNodeRef (Application p f)
       newNodeRef (Application partial t)
-  let mkff = do
-        i <- randomIO
-        atomically do
-          lambdaHelper \f -> lambdaHelper \x -> do
-            (_, f1, f2) <- createDup i f
-            partial <- newNodeRef (Application f1 x)
-            newNodeRef (Application f2 partial)
-  -- forced to cheat here, TODO(Maxime): use constructors to solve this
-  ffs <- replicateM (fromEnum n) mkff
-  finalF <- atomically do foldlM ((newNodeRef .) . flip Application) notF ffs
+  let ff =
+        [ ([IntegerValue 0, Variable Nothing], pure . (!! 1)),
+          ( [Variable Nothing, Variable Nothing],
+            \case
+              [m, f] -> lambdaHelper \x -> do
+                m' <- newNodeRef . Operator '-' m =<< newNodeRef (IntegerValue 1)
+                φ <- newNodeRef (Constructor 0x0 [m', f])
+                (_, φ₁, φ₂) <- createDup 0 φ
+                partial <- newNodeRef (Application φ₁ x)
+                newNodeRef (Application φ₂ partial)
+              _ -> undefined
+          )
+        ]
+  m <- newNodeRefIO (IntegerValue (fromEnum n))
+  finalF <- newNodeRefIO (Constructor 0x0 [m, notF])
   result <- newNodeRefIO (Application finalF true)
-  evaluate mempty result
+  evaluate (singleton 0x0 ff) result
 
 prop_op :: Int -> Int -> Property
 prop_op a' b' = monadicIO $ run do
