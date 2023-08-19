@@ -2,13 +2,16 @@ module Tests where
 
 import Data.Bits
 import Data.Foldable
+import Data.Functor
 import Data.IntMap.Strict
 import GHC.Conc
 import GHC.TypeLits
+import Parser
 import Runtime (Patterns, evaluate)
 import System.Random (randomIO)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
+import Text.Parsec (runParserT)
 import Types
 
 prop_vie_est_belle :: Bool
@@ -253,7 +256,7 @@ bigIntPresets =
             [ ( [any', any'],
                 \case
                   [a, b] -> do
-                    (_, b₁,b') <- createDup 0 b
+                    (_, b₁, b') <- createDup 0 b
                     (_, b₂, b₃) <- createDup 1 b'
                     e <- newNodeRef (Constructor 0x0 [])
                     o <- lambdaHelper \p -> do
@@ -309,3 +312,9 @@ prop_bigint_mul a b = do
   root <- newNodeRefIO (Constructor 0x8 [scottC])
   result <- evaluate bigIntPresets root
   pure (result == expected)
+
+prop_should_parse :: Parser a -> String -> IO Bool
+prop_should_parse p s =
+  atomically (runParserT p startScope "test" s) <&> \case
+    Left _ -> False
+    Right _ -> True

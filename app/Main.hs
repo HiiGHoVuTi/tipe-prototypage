@@ -1,6 +1,9 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+
 module Main where
 
 import GHC.TypeLits
+import Parser qualified
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import Test.Tasty.Bench
@@ -12,6 +15,19 @@ main :: IO ()
 main =
   defaultMain
     [ testProperty "tautology" prop_vie_est_belle,
+      bgroup
+        "parsing"
+        [ testProperties "basic expressions" $
+            fmap (monadicIO . run . prop_should_parse Parser.expr)
+              <$> [ ("num literal", "1"),
+                    ("constructor", "Hello 1 2 3"),
+                    ("application", "hi 1 2 y"),
+                    ("parentheses", "a (test 1 2 3)"),
+                    ("nesting app", "hi (hello world) (And (you nesting))"),
+                    ("let binding", "let a = 2 in 3"),
+                    ("dup binding", "let a b = 1 in a")
+                  ]
+        ],
       bgroup
         "interpreter correctness"
         [ testProperty "identity" prop_id_on_int,
