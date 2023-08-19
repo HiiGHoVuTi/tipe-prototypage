@@ -154,12 +154,17 @@ pattern =
         spaces
         void (string "=")
         spaces
+        -- Saves input to feed to the expr parser *later*
         input <- getInput
+        -- Simulates running the parser but discards the result, preventing failure
         _body <- expr
         currentPatterns <- getState <&> patterns <&> reverse
-        let unwrap (Right x) = x; unwrap _ = error "unwrap"
+        let -- The parser cannot actually fail, as it is ran (successfully) before on the same input
+            unwrap (Right x) = x; unwrap _ = error "unwrap"
             bodyF xs =
               let addToScope = (modifyState . modifyScope) .: insert
+                  -- Injects all the necessary variables (provided later)
+                  -- in the parsing environment of the body, simulating passing them as arguments
                   inject = zipWithM_ addToScope currentPatterns xs
                in unwrap <$> runParserT (inject *> expr) startScope "pattern" input
         pure (entries, bodyF)
