@@ -90,10 +90,31 @@ expr = expr'List <|> expr'
       spaces
       arguments <- many expr
       lift (newNodeRef (Constructor name arguments))
+    operator = try do
+      spaces
+      op <- oneOf "+-*/%"
+      spaces
+      lhs <- expr'
+      spaces
+      rhs <- expr'
+      spaces
+      lift (newNodeRef (Operator op lhs rhs))
+    lambda = try do
+      spaces
+      void (oneOf "\\λ")
+      argname <- many1 (oneOf identifierChars)
+      spaces
+      arg <- lift (newNodeRef (Variable Nothing))
+      modifyState (modifyScope (insert argname arg))
+      body <- expr
+      spaces
+      lift (newNodeRef (Lambda arg body))
     expr' =
       exprParen
         <|> integer
         <|> letParser
         <|> dupParser
         <|> constructor
+        <|> operator
+        <|> lambda
         <|> identifier

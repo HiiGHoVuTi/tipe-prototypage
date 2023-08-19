@@ -25,7 +25,9 @@ main =
                     ("parentheses", "a (test 1 2 3)"),
                     ("nesting app", "hi (hello world) (And (you nesting))"),
                     ("let binding", "let a = 2 in 3"),
-                    ("dup binding", "let a b = 1 in a")
+                    ("dup binding", "let a b = 1 in a"),
+                    ("lam binding", "λx f x"),
+                    ("prefixbinop", "+ 1 (* 2 3)")
                   ]
         ],
       bgroup
