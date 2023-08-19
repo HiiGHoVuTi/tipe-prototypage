@@ -11,7 +11,7 @@ import Runtime (Patterns, evaluate)
 import System.Random (randomIO)
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
-import Text.Parsec (runParserT)
+import Text.Parsec (eof, runParserT)
 import Types
 
 prop_vie_est_belle :: Bool
@@ -315,6 +315,17 @@ prop_bigint_mul a b = do
 
 prop_should_parse :: Parser a -> String -> IO Bool
 prop_should_parse p s =
-  atomically (runParserT p startScope "test" s) <&> \case
+  atomically (runParserT (p <* eof) startScope "test" s) <&> \case
     Left _ -> False
     Right _ -> True
+
+prop_parse_and_run :: String -> String -> IO Node
+prop_parse_and_run pat src = do
+  pat' <- atomically (runParserT (pattern <* eof) startScope "test" pat)
+  src' <- atomically (runParserT (expr <* eof) startScope "test" src)
+  case (pat', src') of
+    (Right patterns, Right ref) -> evaluate patterns ref
+    _ -> error "No Parse !"
+
+prop_parse_and_check :: String -> String -> (Node -> Bool) -> IO Bool
+prop_parse_and_check pat src predicate = predicate <$> prop_parse_and_run pat src

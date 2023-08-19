@@ -22,13 +22,50 @@ main =
               <$> [ ("num literal", "1"),
                     ("constructor", "Hello 1 2 3"),
                     ("application", "hi 1 2 y"),
-                    ("parentheses", "a (test 1 2 3)"),
+                    ("parentheses", "a b (test 1 2 3)"),
+                    ("parentheses", "(test 1 2) a"),
                     ("nesting app", "hi (hello world) (And (you nesting))"),
-                    ("let binding", "let a = 2 in 3"),
-                    ("dup binding", "let a b = 1 in a"),
-                    ("lam binding", "λx f x"),
-                    ("prefixbinop", "+ 1 (* 2 3)")
-                  ]
+                    ("let binding", "let a = 2, 3"),
+                    ("dup binding", "dup a b = 1, 3"),
+                    ("lam binding", "λx λy f x y"),
+                    ("prefixbinop", "+ 1 (* 2 (/ 3 4))")
+                  ],
+          testProperties "patterns" $
+            fmap (monadicIO . run . prop_should_parse Parser.pattern)
+              <$> [ ("single name", "X = 0"),
+                    ("single argument", "X a = a"),
+                    ("many arguments", "X a b = a"),
+                    ("many cases", "X 0 b = 1, c d = d"),
+                    ("many patterns", "X 0 b = 1, c d = d. Y a = a")
+                  ],
+          testProperties "runs straightforward expressions" $
+            let uncurry' f (a, b) = f "" a b
+             in fmap (monadicIO . run . uncurry' prop_parse_and_check)
+                  <$> [ ("literal", ("3", (== IntegerValue 3))),
+                        ("let binding", ("let x = 3, x", (== IntegerValue 3))),
+                        ("dup binding", ("dup x y = + 3 3, * x y", (== IntegerValue 36))),
+                        ("identity", ("let id = λx x, id 3", (== IntegerValue 3))),
+                        ("true", ("dup true t = λx λy x, true 3 4", (== IntegerValue 3))),
+                        ( "not",
+                          ( "dup true t = λx λy x,"
+                              <> "let not = λp λx λy p y x, (not true) 3 4",
+                            (== IntegerValue 4)
+                          )
+                        )
+                      ],
+          testProperties "call destructor patterns" $
+            let uncurry3 f (a, b, c) = f a b c
+             in fmap (monadicIO . run . uncurry3 prop_parse_and_check)
+                  <$> [ ("literal", ("X = 3", "X", (== IntegerValue 3))),
+                        ("simple rewrite", ("F x = + x 1", "F 3", (== IntegerValue 4))),
+                        ("many arguments", ("F a b c = + a (* b c)", "F 1 2 3", (== IntegerValue 7))),
+                        ("integer arguments", ("F 0 a = a", "F 0 1", (== IntegerValue 1))),
+                        ("integer arguments", ("F 0 a = a, a b = a", "F 0 1", (== IntegerValue 1))),
+                        ("exact matches", ("F 1 = 0, 0 = 1", "+ (F 1) (F 0)", (== IntegerValue 1))),
+                        ("mixed matches", ("F 0 = 0, a = a", "F 18", (== IntegerValue 18))),
+                        ("recursive identity", ("F 0 = 0, n = + 1 (F (- n 1))", "F 18", (== IntegerValue 18))),
+                        ("fibonacci", ("F 0 = 1, 1 = 1, n = + (F (- n 1)) (F (- n 2))", "F 8", (== IntegerValue 34)))
+                      ]
         ],
       bgroup
         "interpreter correctness"
